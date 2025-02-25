@@ -10,6 +10,7 @@
 #include <lk/cpp.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <lk/list.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <dev/bus/pci.h>
