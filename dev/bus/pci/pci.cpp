@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <kernel/thread.h>
+#include <kernel/lockdep.h>
 #include <kernel/spinlock.h>
 #include <lk/trace.h>
 
@@ -23,7 +24,7 @@
 // Largely C level api for the PCI bus manager
 
 namespace {
-SpinLock lock;
+DECLARE_SINGLETON_SPINLOCK(pci_lock);
 pci_backend *pcib = nullptr;
 } // namespace
 
@@ -44,7 +45,7 @@ int pci_get_last_segment() {
 status_t pci_read_config_byte(const pci_location_t state, uint32_t reg, uint8_t *value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->read_config_byte(state, reg, value);
 
@@ -53,7 +54,7 @@ status_t pci_read_config_byte(const pci_location_t state, uint32_t reg, uint8_t 
 status_t pci_read_config_half(const pci_location_t state, uint32_t reg, uint16_t *value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->read_config_half(state, reg, value);
 
@@ -63,7 +64,7 @@ status_t pci_read_config_half(const pci_location_t state, uint32_t reg, uint16_t
 status_t pci_read_config_word(const pci_location_t state, uint32_t reg, uint32_t *value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->read_config_word(state, reg, value);
 
@@ -73,7 +74,7 @@ status_t pci_read_config_word(const pci_location_t state, uint32_t reg, uint32_t
 status_t pci_write_config_byte(const pci_location_t state, uint32_t reg, uint8_t value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->write_config_byte(state, reg, value);
 
@@ -83,7 +84,7 @@ status_t pci_write_config_byte(const pci_location_t state, uint32_t reg, uint8_t
 status_t pci_write_config_half(const pci_location_t state, uint32_t reg, uint16_t value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->write_config_half(state, reg, value);
 
@@ -93,7 +94,7 @@ status_t pci_write_config_half(const pci_location_t state, uint32_t reg, uint16_
 status_t pci_write_config_word(const pci_location_t state, uint32_t reg, uint32_t value) {
     if (!pcib) return ERR_NOT_CONFIGURED;
 
-    AutoSpinLock guard(&lock);
+    Guard<SpinLock, IrqSave> guard{pci_lock::Get()};
 
     int res = pcib->write_config_word(state, reg, value);
 

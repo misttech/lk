@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <lk/compiler.h>
+#include <lk/err.h>
 
 // pci level structures and defines
 #include <hw/pci.h>

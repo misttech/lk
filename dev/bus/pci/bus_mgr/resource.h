@@ -20,7 +20,7 @@ struct resource_range {
     uint64_t size;
 
     void dump() {
-        printf("resource type %d: base %#llx size %#llx\n",
+        printf("resource type %d: base %#lx size %#lx\n",
                 type, base, size);
     }
 };

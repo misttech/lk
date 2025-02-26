@@ -1,0 +1,41 @@
+# Copyright 2025 Mist Tecnologia Ltda. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/zircon/zx_library.gni")
+
+zx_library("pci") {
+  sources = [
+    "backend/ecam.cpp",
+    "backend/type1.cpp",
+    "bus_mgr/bridge.cpp",
+    "bus_mgr/bus.cpp",
+    "bus_mgr/bus_mgr.cpp",
+    "bus_mgr/device.cpp",
+    "bus_mgr/resource.cpp",
+    "debug.cpp",
+    "pci.cpp",
+  ]
+
+  deps = [
+    "//zircon/kernel/lib/console",
+    "//zircon/kernel/vm:headers",
+    "//zircon/system/ulib/pretty",
+  ]
+
+  public_deps = [
+    "//third_party/lk/dev",
+    "//vendor/misttech/lib/lk_redirect:headers",
+  ]
+
+  cflags_cc = [
+    "-Wno-invalid-offsetof",
+    "-Wmissing-declarations",
+  ]
+
+  configs += [ ":suppress-warning" ]
+}
+
+config("suppress-warning") {
+  cflags_cc = [ "-Wno-implicit-int-conversion" ]
+}
