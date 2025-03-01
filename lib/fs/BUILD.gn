@@ -1,0 +1,24 @@
+# Copyright 2025 Mist Tecnologia Ltda. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/zircon/zx_library.gni")
+
+zx_library("fs") {
+  sources = [
+    "debug.cc",
+    "fs.cc",
+    "shell.cc",
+  ]
+
+  deps = [
+    "test",
+    "//third_party/lk/lib/bio",
+    "//zircon/kernel/lib/console",
+    "//zircon/kernel/lib/init",
+    "//zircon/kernel/vm:headers",
+    "//zircon/system/ulib/pretty",
+  ]
+
+  public_deps = [ "//vendor/misttech/lib/lk_redirect:headers" ]
+}

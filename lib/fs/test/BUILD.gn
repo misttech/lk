@@ -1,0 +1,12 @@
+# Copyright 2025 Mist Tecnologia Ltda. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("test") {
+  sources = [ "test.cc" ]
+
+  deps = [
+    "//third_party/lk/lib/fs:headers",
+    "//zircon/kernel/lib/unittest",
+  ]
+}
