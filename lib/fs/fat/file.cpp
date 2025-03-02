@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <fbl/alloc_checker.h>
 #include <lk/debug.h>
 #include <lk/err.h>
 #include <lk/trace.h>
@@ -52,7 +53,7 @@ bool fat_file::dec_ref() {
 }
 
 status_t fat_file::open_file_priv(const dir_entry &entry, const dir_entry_location &loc) {
-  DEBUG_ASSERT(fs_->lock.is_held());
+  Guard<Mutex> guard{&fs_->lock};
 
   LTRACEF("found file at location %u:%u\n", loc.starting_dir_cluster, loc.dir_offset);
 
@@ -85,7 +86,7 @@ status_t fat_file::open_file(fscookie *cookie, const char *path, filecookie **fc
 
   LTRACEF("fscookie %p path '%s' fcookie %p\n", cookie, path, fcookie);
 
-  AutoLock guard(fs->lock);
+  Guard<Mutex> guard{&fs->lock};
 
   // look for the file in the fs
   dir_entry entry;
@@ -99,7 +100,11 @@ status_t fat_file::open_file(fscookie *cookie, const char *path, filecookie **fc
   fat_file *file = fs->lookup_file(loc);
   if (!file) {
     // didn't find an existing one, create a new object
-    file = new fat_file(fs);
+    fbl::AllocChecker ac;
+    file = new (&ac) fat_file(fs);
+    if (!ac.check()) {
+      return ERR_NO_MEMORY;
+    }
   }
   DEBUG_ASSERT(file);
 
@@ -129,7 +134,7 @@ ssize_t fat_file::read_file_priv(void *_buf, const off_t offset, size_t len) {
     return ERR_INVALID_ARGS;
   }
 
-  AutoLock guard(fs_->lock);
+  Guard<Mutex> guard{&fs_->lock};
 
   // trim the read to the file
   if (offset >= length_) {
@@ -146,20 +151,21 @@ ssize_t fat_file::read_file_priv(void *_buf, const off_t offset, size_t len) {
   LTRACEF("trimmed offset %lld len %zu\n", offset, len);
 
   // create a file block iterator and push it forward to the starting point
-  uint32_t logical_cluster = offset / fs_->info().bytes_per_cluster;
-  uint32_t sector_within_cluster =
-      (offset % fs_->info().bytes_per_cluster) / fs_->info().bytes_per_sector;
-  uint32_t offset_within_sector = offset % fs_->info().bytes_per_sector;
+  uint64_t logical_cluster = static_cast<uint64_t>(offset) / fs_->info().bytes_per_cluster;
+  uint32_t sector_within_cluster = static_cast<uint32_t>((offset % fs_->info().bytes_per_cluster) /
+                                                         fs_->info().bytes_per_sector);
+  uint32_t offset_within_sector = static_cast<uint32_t>(offset % fs_->info().bytes_per_sector);
 
-  LTRACEF("starting off logical cluster %u, sector within %u, offset within %u\n", logical_cluster,
+  LTRACEF("starting off logical cluster %lu, sector within %u, offset within %u\n", logical_cluster,
           sector_within_cluster, offset_within_sector);
 
   file_block_iterator fbi(fs_, start_cluster_);
 
   // move it forward to our index point
   // also loads the buffer
-  status_t err =
-      fbi.next_sectors(logical_cluster * fs_->info().sectors_per_cluster + sector_within_cluster);
+  uint64_t sectors_to_move =
+      logical_cluster * fs_->info().sectors_per_cluster + sector_within_cluster;
+  status_t err = fbi.next_sectors(static_cast<uint32_t>(sectors_to_move));
   if (err < 0) {
     LTRACEF("error moving up to starting point!\n");
     return err;
@@ -168,7 +174,8 @@ ssize_t fat_file::read_file_priv(void *_buf, const off_t offset, size_t len) {
   ssize_t amount_read = 0;
   size_t buf_offset = 0;  // offset into the output buffer
   while (buf_offset < len) {
-    size_t to_read = MIN(fs_->info().bytes_per_sector - offset_within_sector, len - buf_offset);
+    size_t to_read = ktl::min(
+        static_cast<size_t>(fs_->info().bytes_per_sector - offset_within_sector), len - buf_offset);
 
     LTRACEF("top of loop: sector offset %u, buf offset %zu, remaining len %zu, to_read %zu\n",
             offset_within_sector, buf_offset, len, to_read);
@@ -215,7 +222,7 @@ ssize_t fat_file::read_file(filecookie *fcookie, void *_buf, const off_t offset,
 }
 
 status_t fat_file::stat_file_priv(struct file_stat *stat) {
-  AutoLock guard(fs_->lock);
+  Guard<Mutex> guard{&fs_->lock};
 
   stat->size = length_;
   stat->is_dir = is_dir();
@@ -229,7 +236,7 @@ status_t fat_file::stat_file(filecookie *fcookie, struct file_stat *stat) {
 }
 
 status_t fat_file::close_file_priv(bool *last_ref) {
-  AutoLock guard(fs_->lock);
+  Guard<Mutex> guard{&fs_->lock};
 
   // drop a ref to it, which may remove from the global list
   // and return whether or not it was the last ref

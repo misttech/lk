@@ -8,21 +8,35 @@
 
 #include <endian.h>
 #include <lib/bio.h>
+#include <lib/fit/defer.h>
 #include <lib/fs.h>
-#include <lib/unittest.h>
-#include <malloc.h>
+#include <lib/unittest/unittest.h>
 #include <string.h>
 
+#include <fbl/alloc_checker.h>
 #include <lk/cpp.h>
 #include <lk/debug.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <pretty/hexdump.h>
 
 #define LOCAL_TRACE 0
 
 // A set of test cases run against a block device image created from the test script
 // in the same directory as this. It should contain a set of known directories and
 // files for the test to work with.
+
+#define INCBIN(symname, sizename, filename, section)            \
+  __asm__(".section " section "; .balign 4; .globl " #symname); \
+  __asm__("" #symname ":\n.incbin \"" filename "\"");           \
+  __asm__(".balign 1; " #symname "_end:");                      \
+  __asm__(".balign 4; .globl " #sizename);                      \
+  __asm__("" #sizename ": .long " #symname "_end - " #symname); \
+  __asm__(".previous");                                         \
+  extern unsigned char symname[];                               \
+  extern unsigned int sizename
+
+#define INCFILE(symname, sizename, filename) INCBIN(symname, sizename, filename, ".rodata.test")
 
 // pull in a few test files into rodata to test against
 INCFILE(test_file_hello, test_file_hello_size, LOCAL_DIR "/hello.txt");
@@ -51,7 +65,7 @@ bool test_fat_dir_root() {
   ASSERT_EQ(NO_ERROR, fs_mount(test_path, "fat", test_device_name));
 
   // clean up by unmounting no matter what happens here
-  auto unmount_cleanup = lk::make_auto_call([]() { fs_unmount(test_path); });
+  auto unmount_cleanup = fit::defer([]() { fs_unmount(test_path); });
 
   // open and then close the root dir
   dirhandle *handle;
@@ -64,7 +78,7 @@ bool test_fat_dir_root() {
   ASSERT_NONNULL(handle);
 
   // close the dir handle if we abort from here on out
-  auto closedir_cleanup = lk::make_auto_call([&]() { fs_close_dir(handle); });
+  auto closedir_cleanup = fit::defer([&]() { fs_close_dir(handle); });
 
   // read an entry
   dirent ent;
@@ -103,13 +117,15 @@ bool test_file_read(const char *path, const unsigned char *test_file_buffer,
   // open the file
   filehandle *handle = nullptr;
   ASSERT_EQ(NO_ERROR, fs_open_file(path, &handle));
-  auto closefile_cleanup = lk::make_auto_call([&]() { fs_close_file(handle); });
+  auto closefile_cleanup = fit::defer([&]() { fs_close_file(handle); });
 
   ASSERT_NONNULL(handle);
 
   const size_t buflen = test_file_size * 2;  // should be somewhat larger than test_file_size
-  char *buf = new char[buflen];
-  auto delete_buffer = lk::make_auto_call([&]() { delete[] buf; });
+  fbl::AllocChecker ac;
+  char *buf = new (&ac) char[buflen];
+  ASSERT_TRUE(ac.check());
+  auto delete_buffer = fit::defer([&]() { delete[] buf; });
 
   // try to read the file in and make sure it reads exactly the target size of bytes
   ssize_t read_len = fs_read_file(handle, buf, 0, buflen);
@@ -136,7 +152,7 @@ bool test_fat_read_file() {
 
   ASSERT_EQ(NO_ERROR, fs_mount(test_path, "fat", test_device_name));
   // clean up by unmounting no matter what happens here
-  auto unmount_cleanup = lk::make_auto_call([]() { fs_unmount(test_path); });
+  auto unmount_cleanup = fit::defer([]() { fs_unmount(test_path); });
 
   // read in a few files and validate their contents
   EXPECT_TRUE(test_file_read(test_path "/hello.txt", test_file_hello, test_file_hello_size));
@@ -161,17 +177,17 @@ bool test_fat_multi_open() {
 
   ASSERT_EQ(NO_ERROR, fs_mount(test_path, "fat", test_device_name));
   // clean up by unmounting no matter what happens here
-  auto unmount_cleanup = lk::make_auto_call([]() { fs_unmount(test_path); });
+  auto unmount_cleanup = fit::defer([]() { fs_unmount(test_path); });
 
   // open a file three times simultaneously
   {
     filehandle *handle1 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_file(test_path "/hello.txt", &handle1));
-    auto closefile_cleanup1 = lk::make_auto_call([&]() { fs_close_file(handle1); });
+    auto closefile_cleanup1 = fit::defer([&]() { fs_close_file(handle1); });
 
     filehandle *handle2 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_file(test_path "/hello.txt", &handle2));
-    auto closefile_cleanup2 = lk::make_auto_call([&]() { fs_close_file(handle2); });
+    auto closefile_cleanup2 = fit::defer([&]() { fs_close_file(handle2); });
 
     filehandle *handle3 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_file(test_path "/hello.txt", &handle3));
@@ -188,11 +204,11 @@ bool test_fat_multi_open() {
   {
     dirhandle *handle1 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_dir(test_path "/dir.a", &handle1));
-    auto closedir_cleanup1 = lk::make_auto_call([&]() { fs_close_dir(handle1); });
+    auto closedir_cleanup1 = fit::defer([&]() { fs_close_dir(handle1); });
 
     dirhandle *handle2 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_dir(test_path "/dir.a", &handle2));
-    auto closedir_cleanup2 = lk::make_auto_call([&]() { fs_close_dir(handle2); });
+    auto closedir_cleanup2 = fit::defer([&]() { fs_close_dir(handle2); });
 
     dirhandle *handle3 = nullptr;
     ASSERT_EQ(NO_ERROR, fs_open_dir(test_path "/dir.a", &handle3));
@@ -212,11 +228,11 @@ bool test_fat_multi_open() {
   END_TEST;
 }
 
-BEGIN_TEST_CASE(fat)
-RUN_TEST(test_fat_mount)
-RUN_TEST(test_fat_dir_root)
-RUN_TEST(test_fat_read_file)
-RUN_TEST(test_fat_multi_open)
-END_TEST_CASE(fat)
+UNITTEST_START_TESTCASE(fat)
+UNITTEST("fat mount test", test_fat_mount)
+UNITTEST("fat dir root test", test_fat_dir_root)
+UNITTEST("fat read file test", test_fat_read_file)
+UNITTEST("fat multi open test", test_fat_multi_open)
+UNITTEST_END_TESTCASE(fat, "fat", "fat filesystem tests")
 
 }  // namespace

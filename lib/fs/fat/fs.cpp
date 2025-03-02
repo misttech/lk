@@ -9,10 +9,11 @@
 
 #include <endian.h>
 #include <lib/bio.h>
+#include <lib/fit/defer.h>
 #include <lib/fs.h>
-#include <malloc.h>
 #include <string.h>
 
+#include <fbl/alloc_checker.h>
 #include <lk/cpp.h>
 #include <lk/debug.h>
 #include <lk/err.h>
@@ -50,20 +51,22 @@ fat_fs::~fat_fs() = default;
 status_t fat_fs::mount(bdev_t *dev, fscookie **cookie) {
   status_t result = NO_ERROR;
 
-  if (!dev)
+  if (!dev) {
     return ERR_NOT_VALID;
+  }
 
-  uint8_t *bs = (uint8_t *)malloc(512);
-  if (!bs) {
+  fbl::AllocChecker ac;
+  uint8_t *bs = new (&ac) uint8_t[512];
+  if (!ac.check()) {
     return ERR_NO_MEMORY;
   }
 
   // free the block on the way out of the function
-  auto ac = lk::make_auto_call([&]() { free(bs); });
+  auto cleanup = fit::defer([bs]() { delete[] bs; });
 
   ssize_t err = bio_read(dev, bs, 0, 512);
   if (err < 0) {
-    return err;
+    return static_cast<status_t>(err);
   }
 
   if (((bs[0x1fe] != 0x55) || (bs[0x1ff] != 0xaa)) && (bs[0x15] == 0xf8)) {
@@ -71,15 +74,15 @@ status_t fat_fs::mount(bdev_t *dev, fscookie **cookie) {
     return ERR_NOT_VALID;
   }
 
-  // allocate a structure, all fields implicity zeroed
-  auto *fat = new fat_fs;
-  if (!fat) {
+  // allocate a structure, all fields implicitly zeroed
+  auto *fat = new (&ac) fat_fs;
+  if (!ac.check()) {
     return ERR_NO_MEMORY;
   }
   fat->dev_ = dev;
 
   // if we early terminate, free the fat structure
-  auto ac2 = lk::make_auto_call([&]() { delete (fat); });
+  auto cleanup2 = fit::defer([fat]() { delete fat; });
 
   auto *info = &fat->info_;
 
@@ -203,12 +206,12 @@ status_t fat_fs::mount(bdev_t *dev, fscookie **cookie) {
   fat->bcache_ = bcache_create(fat->dev(), info->bytes_per_sector, 16);
 
   // we're okay, cancel our cleanup of the fat structure
-  ac2.cancel();
+  cleanup2.cancel();
 
-#if LOCAL_TRACE
-  printf("Mounted FAT volume, some information:\n");
-  fat_dump(fat);
-#endif
+  if (LOCAL_TRACE) {
+    printf("Mounted FAT volume, some information:\n");
+    fat_dump(fat);
+  }
 
   *cookie = (fscookie *)fat;
 
@@ -219,7 +222,7 @@ status_t fat_fs::unmount(fscookie *cookie) {
   auto *fat = (fat_fs *)cookie;
 
   {
-    AutoLock guard(fat->lock);
+    Guard<Mutex> guard{&fat->lock};
 
     // TODO: handle unmounting when files/dirs are active
     DEBUG_ASSERT(list_is_empty(&fat->file_list_));
@@ -233,7 +236,7 @@ status_t fat_fs::unmount(fscookie *cookie) {
 }
 
 void fat_fs::add_to_file_list(fat_file *file) {
-  DEBUG_ASSERT(lock.is_held());
+  DEBUG_ASSERT(lock.lock().IsHeld());
   DEBUG_ASSERT(!list_in_list(&file->node_));
 
   LTRACEF("file %p, location %u:%u\n", file, file->dir_loc().starting_dir_cluster,
@@ -243,7 +246,7 @@ void fat_fs::add_to_file_list(fat_file *file) {
 }
 
 fat_file *fat_fs::lookup_file(const dir_entry_location &loc) {
-  DEBUG_ASSERT(lock.is_held());
+  DEBUG_ASSERT(lock.lock().IsHeld());
 
   fat_file *f;
   list_for_every_entry (&file_list_, f, fat_file, node_) {

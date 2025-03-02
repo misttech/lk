@@ -17,6 +17,7 @@
 #include <lk/cpp.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <pretty/hexdump.h>
 
 #include "fat_fs.h"
 #include "fat_priv.h"
@@ -212,7 +213,7 @@ status_t fat_find_file_in_dir(fat_fs *fat, uint32_t starting_cluster, const char
                               dir_entry *entry, uint32_t *found_offset) {
   LTRACEF("start_cluster %u, name '%s', out entry %p\n", starting_cluster, name, entry);
 
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   // cache the length of the string we're matching against
   const size_t namelen = strlen(name);
@@ -251,7 +252,7 @@ status_t fat_find_file_in_dir(fat_fs *fat, uint32_t starting_cluster, const char
 status_t fat_walk(fat_fs *fat, const char *path, dir_entry *out_entry, dir_entry_location *loc) {
   LTRACEF("path %s\n", path);
 
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   // routine to push the path element ahead one bump
   // will leave path pointing at the next element, and path_element_size
@@ -298,7 +299,7 @@ status_t fat_walk(fat_fs *fat, const char *path, dir_entry *out_entry, dir_entry
   // walk the directory structure
   for (;;) {
     char name_element[MAX_FILE_NAME_LEN];
-    strlcpy(name_element, path, MIN(sizeof(name_element), path_element_size + 1));
+    strlcpy(name_element, path, ktl::min(sizeof(name_element), path_element_size + 1));
 
     LTRACEF("searching for element %s\n", name_element);
 
@@ -342,7 +343,11 @@ status_t fat_dir::opendir_priv(const dir_entry &entry, const dir_entry_location 
   inc_ref();
 
   // create a dir cookie
-  auto dir_cookie = new fat_dir_cookie;
+  fbl::AllocChecker ac;
+  auto dir_cookie = new (&ac) fat_dir_cookie;
+  if (!ac.check()) {
+    return ERR_NO_MEMORY;
+  }
   dir_cookie->dir = this;
   dir_cookie->index = 0;
 
@@ -359,7 +364,7 @@ status_t fat_dir::opendir(fscookie *cookie, const char *name, dircookie **dcooki
 
   LTRACEF("cookie %p name '%s' dircookie %p\n", cookie, name, dcookie);
 
-  AutoLock guard(fat->lock);
+  Guard<Mutex> guard{&fat->lock};
 
   dir_entry entry;
   dir_entry_location loc;
@@ -397,7 +402,11 @@ status_t fat_dir::opendir(fscookie *cookie, const char *name, dircookie **dcooki
       // XXX replace with hand rolled RTTI
       dir = reinterpret_cast<fat_dir *>(file);
     } else {
-      dir = new fat_dir(fat);
+      fbl::AllocChecker ac;
+      dir = new (&ac) fat_dir(fat);
+      if (!ac.check()) {
+        return ERR_NO_MEMORY;
+      }
     }
     DEBUG_ASSERT(dir);
 
@@ -418,7 +427,7 @@ status_t fat_dir::opendir(fscookie *cookie, const char *name, dircookie **dcooki
   }
 
   return ERR_NOT_IMPLEMENTED;
-};
+}
 
 status_t fat_dir::readdir_priv(fat_dir_cookie *cookie, struct dirent *ent) {
   LTRACEF("dircookie %p ent %p, current index %u\n", cookie, ent, cookie->index);
@@ -434,7 +443,7 @@ status_t fat_dir::readdir_priv(fat_dir_cookie *cookie, struct dirent *ent) {
   dir_entry entry;
 
   {
-    AutoLock guard(fs_->lock);
+    Guard<Mutex> guard{&fs_->lock};
 
     // kick start our directory sector iterator
     LTRACEF("start cluster %u\n", start_cluster_);
@@ -467,7 +476,7 @@ status_t fat_dir::readdir_priv(fat_dir_cookie *cookie, struct dirent *ent) {
   }
 
   // copy the info into the fs layer's entry
-  strlcpy(ent->name, filename, MIN(sizeof(ent->name), MAX_FILE_NAME_LEN));
+  strlcpy(ent->name, filename, ktl::min(sizeof(ent->name), MAX_FILE_NAME_LEN));
 
   return NO_ERROR;
 }
@@ -482,7 +491,7 @@ status_t fat_dir::readdir(dircookie *dcookie, struct dirent *ent) {
 status_t fat_dir::closedir_priv(fat_dir_cookie *cookie, bool *last_ref) {
   LTRACEF("dircookie %p\n", cookie);
 
-  AutoLock guard(fs_->lock);
+  Guard<Mutex> guard{&fs_->lock};
 
   // remove the dircookie from the list
   DEBUG_ASSERT(list_in_list(&cookie->node));

@@ -53,7 +53,7 @@ class fat_fs {
   fat_file *lookup_file(const dir_entry_location &loc);
 
   // for now keep the lock public
-  Mutex lock;
+  DECLARE_MUTEX(fat_fs) lock;
 
  private:
   fat_fs();
@@ -89,7 +89,7 @@ inline uint32_t fat_read32(const void *_buffer, size_t offset) {
 inline uint16_t fat_read16(const void *_buffer, size_t offset) {
   auto *buffer = (const uint8_t *)_buffer;
 
-  return buffer[offset] + (buffer[offset + 1] << 8);
+  return static_cast<uint16_t>(buffer[offset] + (buffer[offset + 1] << 8));
 }
 
 // In fat32, clusters between 0x0fff.fff8 and 0x0fff.ffff are interpreted as

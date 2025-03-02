@@ -18,8 +18,18 @@
 
 #define LOCAL_TRACE FAT_GLOBAL_TRACE(0)
 
+#define LE32SWAP(var)  \
+  do {                 \
+    (var) = LE32(var); \
+  } while (0)
+
+#define LE16SWAP(var)  \
+  do {                 \
+    (var) = LE16(var); \
+  } while (0)
+
 uint32_t fat_next_cluster_in_chain(fat_fs *fat, uint32_t cluster) {
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   // offset in bytes into the FAT for this entry
   uint32_t fat_offset;
@@ -113,7 +123,7 @@ uint32_t fat_next_cluster_in_chain(fat_fs *fat, uint32_t cluster) {
 // given a starting fat cluster, walk the fat chain for offset bytes, returning a new cluster or end
 // of file
 uint32_t file_offset_to_cluster(fat_fs *fat, uint32_t start_cluster, off_t offset) {
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   // negative offsets do not make sense
   DEBUG_ASSERT(offset >= 0);
@@ -138,7 +148,7 @@ uint32_t file_offset_to_cluster(fat_fs *fat, uint32_t start_cluster, off_t offse
 }
 
 uint32_t fat_sector_for_cluster(fat_fs *fat, uint32_t cluster) {
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   // cluster 0 and 1 are undefined
   DEBUG_ASSERT(cluster >= 2);
@@ -155,7 +165,7 @@ uint32_t fat_sector_for_cluster(fat_fs *fat, uint32_t cluster) {
 }
 
 ssize_t fat_read_cluster(fat_fs *fat, void *buf, uint32_t cluster) {
-  DEBUG_ASSERT(fat->lock.is_held());
+  DEBUG_ASSERT(fat->lock.lock().IsHeld());
 
   LTRACEF("buf %p, cluster %u\n", buf, cluster);
 
