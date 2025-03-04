@@ -1,0 +1,28 @@
+# Copyright 2025 Mist Tecnologia Ltda. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/zircon/zx_library.gni")
+
+zx_library("test") {
+  #testonly = true
+  sources = [ "test.cpp" ]
+
+  deps = [
+    "//third_party/lk/lib/bio:headers",
+    "//third_party/lk/lib/fs:headers",
+    "//zircon/kernel/lib/unittest",
+    "//zircon/system/ulib/pretty",
+  ]
+
+  local_dir =
+      rebase_path(get_path_info(get_label_info(":test", "dir"), "abspath"),
+                  root_build_dir)
+  defines = [ "LOCAL_DIR=\"${local_dir}\"" ]
+
+  # These files should force a rebuild if modified
+  inputs = [
+    "hello.txt",
+    "LICENSE",
+  ]
+}

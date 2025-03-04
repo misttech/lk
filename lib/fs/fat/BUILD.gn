@@ -1,0 +1,27 @@
+# Copyright 2025 Mist Tecnologia Ltda. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/zircon/zx_library.gni")
+
+zx_library("fat") {
+  sources = [
+    "dir.cpp",
+    "fat.cpp",
+    "file.cpp",
+    "file_iterator.cpp",
+    "fs.cpp",
+  ]
+
+  deps = [
+    "test",
+    "//sdk/lib/fit",
+    "//third_party/lk/lib/bcache",
+    "//third_party/lk/lib/bio",
+    "//third_party/lk/lib/fs",
+    "//zircon/system/ulib/pretty",
+  ]
+
+  cflags = [ "-Wmissing-declarations" ]
+  cflags_cc = [ "-Wno-invalid-offsetof" ]
+}
