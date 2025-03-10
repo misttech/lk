@@ -26,6 +26,9 @@ zx_library("pci") {
   public_deps = [
     "//third_party/lk/dev",
     "//vendor/misttech/lib/lk_redirect:headers",
+
+    # <dev/pcie_platform.h> has #include <dev/interrupt.h>.
+    "//zircon/kernel/dev/interrupt:headers",
   ]
 
   cflags_cc = [

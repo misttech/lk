@@ -14,12 +14,12 @@
 #include <sys/types.h>
 
 #include <dev/bus/pci.h>
+#include <fbl/alloc_checker.h>
 #include <lk/cpp.h>
 #include <lk/debug.h>
 #include <lk/err.h>
 #include <lk/list.h>
 #include <lk/trace.h>
-// #include <platform/interrupts.h>
 
 #include "bridge.h"
 #include "bus.h"
@@ -319,6 +319,51 @@ status_t pci_bus_mgr_allocate_irq(const pci_location_t loc, uint *irqbase) {
   }
 
   return d->allocate_irq(irqbase);
+}
+
+status_t pci_device_filter_capabilities(pci_location_t loc, int id, struct list_node *out_list) {
+  char str[14];
+  LTRACEF("%s\n", pci_loc_string(loc, str));
+
+  device *d = lookup_device_by_loc(loc);
+  if (!d) {
+    return ERR_NOT_FOUND;
+  }
+
+  auto v = [&](capability *c) -> status_t {
+    if (c->id == id) {
+      fbl::AllocChecker ac;
+      auto cap = new (&ac) pci_capability_node_t;
+      if (!ac.check()) {
+        return ERR_NO_MEMORY;
+      }
+      *cap = {};
+      cap->id = id;
+      cap->config_offset = c->config_offset;
+      list_add_tail(out_list, &cap->node);
+    }
+    return NO_ERROR;
+  };
+
+  d->for_every_capability(v);
+  return NO_ERROR;
+}
+
+status_t pci_device_register_irq_handler(pci_location_t loc, uint irq_id, int_handler handler,
+                                         void *ctx, bool is_msi) {
+  char str[14];
+  LTRACEF("%s\n", pci_loc_string(loc, str));
+
+  device *d = lookup_device_by_loc(loc);
+  if (!d) {
+    return ERR_NOT_FOUND;
+  }
+
+  if (is_msi) {
+    msi_register_handler(&d->block_, irq_id, handler, ctx);
+    return NO_ERROR;
+  }
+  return register_int_handler(irq_id, handler, ctx);
 }
 
 void pci_dump_bar(const pci_bar_t *bar, int index) {

@@ -9,9 +9,12 @@
 #pragma once
 
 #include <assert.h>
-#include <sys/types.h>
+
+#include <dev/interrupt.h>
 #include <lk/compiler.h>
 #include <lk/err.h>
+#include <lk/list.h>
+#include <lk/types.h>
 
 // pci level structures and defines
 #include <hw/pci.h>
@@ -22,20 +25,31 @@ __BEGIN_CDECLS
  * PCI address structure
  */
 typedef struct {
-    uint16_t segment;
-    uint8_t bus;
-    uint8_t dev;
-    uint8_t fn;
+  uint16_t segment;
+  uint8_t bus;
+  uint8_t dev;
+  uint8_t fn;
 } pci_location_t;
 
 typedef struct {
-    uint64_t addr;
-    size_t size;
-    bool io;
-    bool prefetchable;
-    bool size_64;
-    bool valid;
+  uint64_t addr;
+  size_t size;
+  bool io;
+  bool prefetchable;
+  bool size_64;
+  bool valid;
 } pci_bar_t;
+
+typedef struct {
+  struct list_node node;
+  uint8_t id;
+  uint16_t config_offset;
+} pci_capability_node_t;
+
+typedef struct {
+  uint8_t id;
+  uint8_t next;
+} __PACKED pci_capability_t;
 
 // only use one of these two:
 // try to detect PCI based on legacy PC PCI accessor methods
@@ -62,14 +76,14 @@ status_t pci_write_config_word(pci_location_t state, uint32_t reg, uint32_t valu
 // builds a list of devices and allows for various operations on the list
 
 // C level visitor routine
-typedef void(*pci_visit_routine)(pci_location_t loc, void *cookie);
+typedef void (*pci_visit_routine)(pci_location_t loc, void *cookie);
 status_t pci_bus_mgr_visit_devices(pci_visit_routine routine, void *cookie);
 
 // must be called before pci_bus_mgr_init if available
 enum pci_resource_type {
-    PCI_RESOURCE_IO_RANGE = 0,
-    PCI_RESOURCE_MMIO_RANGE,
-    PCI_RESOURCE_MMIO64_RANGE,
+  PCI_RESOURCE_IO_RANGE = 0,
+  PCI_RESOURCE_MMIO_RANGE,
+  PCI_RESOURCE_MMIO64_RANGE,
 };
 status_t pci_bus_mgr_add_resource(enum pci_resource_type, uint64_t mmio_base, uint64_t len);
 
@@ -81,11 +95,13 @@ status_t pci_bus_mgr_init(void);
 // Look for the Nth match of device id and vendor id.
 // Either device or vendor is skipped if set to 0xffff.
 // Error if both is set to 0xffff.
-status_t pci_bus_mgr_find_device(pci_location_t *state, uint16_t device_id, uint16_t vendor_id, size_t index);
+status_t pci_bus_mgr_find_device(pci_location_t *state, uint16_t device_id, uint16_t vendor_id,
+                                 size_t index);
 
 // Look for the Nth match of combination of base, subclass, and interface.
 // interface and subclass may be set to 0xff in which case it will skip.
-status_t pci_bus_mgr_find_device_by_class(pci_location_t *state, uint8_t base_class, uint8_t subclass, uint8_t interface, size_t index);
+status_t pci_bus_mgr_find_device_by_class(pci_location_t *state, uint8_t base_class,
+                                          uint8_t subclass, uint8_t interface, size_t index);
 
 // set io and mem enable on the device
 status_t pci_bus_mgr_enable_device(const pci_location_t loc);
@@ -102,6 +118,12 @@ status_t pci_bus_mgr_allocate_irq(const pci_location_t loc, uint *irqbase);
 // return a pointer to a formatted string
 const char *pci_loc_string(pci_location_t loc, char out_str[14]);
 
+// return a list of filtered capabilities by id
+status_t pci_device_filter_capabilities(pci_location_t loc, int id, struct list_node *out_list);
+
+status_t pci_device_register_irq_handler(pci_location_t loc, uint irq_id, int_handler handler,
+                                         void *ctx, bool is_msi);
+
 // debug printing routines
 void pci_dump_bar(const pci_bar_t *bar, int index);
 void pci_dump_bars(pci_bar_t bar[6], size_t count);
@@ -115,25 +137,21 @@ __END_CDECLS
 // Wrapper to convert lambdas and other function like things to the C api
 template <typename T>
 void pci_bus_mgr_visit_devices(T routine) {
-    struct vdata {
-        T &routine;
-    };
+  struct vdata {
+    T &routine;
+  };
 
-    auto v = [](pci_location_t loc, void *cookie) {
-        vdata *data = static_cast<vdata *>(cookie);
-        data->routine(loc);
-    };
+  auto v = [](pci_location_t loc, void *cookie) {
+    vdata *data = static_cast<vdata *>(cookie);
+    data->routine(loc);
+  };
 
-    vdata data = { routine };
-    pci_bus_mgr_visit_devices(v, &data);
+  vdata data = {routine};
+  pci_bus_mgr_visit_devices(v, &data);
 }
 
 inline bool operator==(pci_location_t a, pci_location_t b) {
-    return a.segment == b.segment &&
-        a.bus == b.bus &&
-        a.dev == b.dev &&
-        a.fn == b.fn;
+  return a.segment == b.segment && a.bus == b.bus && a.dev == b.dev && a.fn == b.fn;
 }
 
-#endif // __cplusplus
-
+#endif  // __cplusplus

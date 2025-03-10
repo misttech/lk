@@ -23,9 +23,8 @@
 #include <lk/list.h>
 #include <lk/pow2.h>
 #include <lk/trace.h>
-// #include <platform/interrupts.h>
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 2
 
 #include "bridge.h"
 #include "bus_mgr.h"
@@ -262,6 +261,8 @@ status_t device::init_msix_capability(capability *cap) {
   return NO_ERROR;
 }
 
+#define INT_BASE 0x20
+
 status_t device::allocate_irq(uint *irq) {
   LTRACE_ENTRY;
 
@@ -274,10 +275,16 @@ status_t device::allocate_irq(uint *irq) {
     return ERR_NO_RESOURCES;
   }
 
+  LTRACEF("pci_int %u\n", interrupt_line);
+
   // map the irq number in config space to platform vector space
-  // err = platform_pci_int_to_vector(interrupt_line, irq);
-  // return err;
-  return ERR_NOT_SUPPORTED;
+  // pci interrupts are relative to PIC style irq #s so simply add INT_BASE to it
+  //*irq = interrupt_line + INT_BASE;
+  *irq = interrupt_line;
+  
+  printf("allocated irq %u\n", *irq);
+
+  return err;
 }
 
 status_t device::allocate_msi(size_t num_requested, uint *msi_base) {
@@ -291,32 +298,26 @@ status_t device::allocate_msi(size_t num_requested, uint *msi_base) {
 
   DEBUG_ASSERT(msi_cap_ && msi_cap_->is_msi());
 
-  // ask the platform for interrupts
-  uint vector_base = 0;
-  // status_t err = platform_allocate_interrupts(num_requested, 0, true, &vector_base);
-  status_t err = ERR_NOT_SUPPORTED;
-  if (err != NO_ERROR) {
-    return err;
-  }
-
-  // compute the MSI message to construct
-  uint64_t msi_address = 0;
-  uint16_t msi_data = 0;
-  // err = platform_compute_msi_values(vector_base, 0, true, &msi_address, &msi_data);
-  err = ERR_NOT_SUPPORTED;
-  if (err != NO_ERROR) {
-    // TODO: return the allocated msi
-    return err;
-  }
-
   // program it into the capability
   const uint16_t cap_offset = msi_cap_->config_offset;
 
   uint16_t control;
   pci_read_config_half(loc(), cap_offset + 2, &control);
+  bool can_target_64bit = control & (1 << 7);
+
+  // ask the platform for interrupts
+  zx_status_t status = msi_alloc_block(num_requested, can_target_64bit, false, &block_);
+  if (status != ZX_OK) {
+    return status;
+  }
+  uint vector_base = block_.base_irq_id;
+  uint64_t msi_address = block_.tgt_addr;
+  uint32_t msi_data = block_.tgt_data;
+
+  // disable MSI
   pci_write_config_half(loc(), cap_offset + 2, control & ~(0x1));           // disable MSI
   pci_write_config_word(loc(), cap_offset + 4, msi_address & 0xffff'ffff);  // lower 32bits
-  if (control & (1 << 7)) {
+  if (can_target_64bit) {
     // 64bit
     pci_write_config_word(loc(), cap_offset + 8, msi_address >> 32);  // upper 32bits
     pci_write_config_half(loc(), cap_offset + 0xc, msi_data);

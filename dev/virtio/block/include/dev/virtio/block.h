@@ -7,11 +7,15 @@
  */
 #pragma once
 
-#include <lk/compiler.h>
 #include <sys/types.h>
+
 #include <dev/virtio.h>
+#include <lk/compiler.h>
 
-status_t virtio_block_init(struct virtio_device *dev, uint32_t host_features) __NONNULL();
+// 128 matches legacy pci.
+static constexpr uint16_t kRingSize = 128;
 
-ssize_t virtio_block_read_write(struct virtio_device *dev, void *buf, off_t offset, size_t len, bool write) __NONNULL();
+// A queue of block request/responses.
+static constexpr size_t kBlkReqCount = 32;
 
+status_t virtio_block_init(struct virtio_device *dev, uint32_t host_features) __NONNULL((1));
