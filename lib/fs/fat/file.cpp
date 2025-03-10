@@ -53,7 +53,7 @@ bool fat_file::dec_ref() {
 }
 
 status_t fat_file::open_file_priv(const dir_entry &entry, const dir_entry_location &loc) {
-  Guard<Mutex> guard{&fs_->lock};
+  DEBUG_ASSERT(fs_->lock.lock().IsHeld());
 
   LTRACEF("found file at location %u:%u\n", loc.starting_dir_cluster, loc.dir_offset);
 
