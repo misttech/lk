@@ -9,5 +9,5 @@ zx_library("string") {
 
   deps = [ "//zircon/kernel/lib/heap" ]
 
-  public_deps = [ "//vendor/misttech/lib/lk_redirect:headers" ]
+  public_deps = [ "//vendor/misttech/zircon/kernel/lib/lk_redirect:headers" ]
 }

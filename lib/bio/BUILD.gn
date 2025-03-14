@@ -13,16 +13,16 @@ zx_library("bio") {
   ]
 
   deps = [
-    "//vendor/misttech/lib/lk_redirect",
+    "//vendor/misttech/zircon/kernel/lib/lk_redirect",
     "//zircon/kernel/lib/console",
     "//zircon/kernel/lib/init",
     "//zircon/system/ulib/pretty",
   ]
 
-  public_deps = [ "//vendor/misttech/lib/lk_redirect:headers" ]
+  public_deps = [ "//vendor/misttech/zircon/kernel/lib/lk_redirect:headers" ]
 
   configs += [
-    "//vendor/misttech/lib/lk_redirect:suppress-warning",
+    "//vendor/misttech/zircon/kernel/lib/lk_redirect:suppress-warning",
     "//build/config:Wno-vla-cxx-extension",
   ]
 }

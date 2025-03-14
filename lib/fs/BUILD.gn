@@ -20,5 +20,5 @@ zx_library("fs") {
     "//zircon/system/ulib/pretty",
   ]
 
-  public_deps = [ "//vendor/misttech/lib/lk_redirect:headers" ]
+  public_deps = [ "//vendor/misttech/zircon/kernel/lib/lk_redirect:headers" ]
 }
