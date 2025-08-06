@@ -17,6 +17,7 @@ zx_library("bio") {
     "//zircon/kernel/lib/console",
     "//zircon/kernel/lib/init",
     "//zircon/system/ulib/pretty",
+    "//zircon/system/ulib/zircon-internal",
   ]
 
   public_deps = [ "//vendor/misttech/zircon/kernel/lib/lk_redirect:headers" ]

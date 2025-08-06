@@ -10,6 +10,7 @@
 
 #include <align.h>
 #include <assert.h>
+#include <lib/zircon-internal/align.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,7 +75,7 @@ static ssize_t bio_default_read(struct bdev *dev, void *_buf, off_t offset, size
 
   // If the device requires alignment AND our buffer is not alread aligned.
   requires_alignment = (dev->flags & BIO_FLAG_CACHE_ALIGNED_READS) &&
-                       (IS_ALIGNED((size_t)buf, MAX_CACHE_LINE) == false);
+                       (ZX_IS_ALIGNED((size_t)buf, MAX_CACHE_LINE) == false);
   /* handle middle blocks */
   if (requires_alignment) {
     while (len >= dev->block_size) {
@@ -179,7 +180,7 @@ static ssize_t bio_default_write(struct bdev *dev, const void *_buf, off_t offse
 
   // If the device requires alignment AND our buffer is not alread aligned.
   requires_alignment = (dev->flags & BIO_FLAG_CACHE_ALIGNED_WRITES) &&
-                       (IS_ALIGNED((size_t)buf, MAX_CACHE_LINE) == false);
+                       (ZX_IS_ALIGNED((size_t)buf, MAX_CACHE_LINE) == false);
 
   /* handle middle blocks */
   if (requires_alignment) {
